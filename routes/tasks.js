@@ -1,16 +1,26 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
+const SpecialTask = require("../models/SpecialTask");
 
-// Get all tasks (can be dynamic from DB later)
-router.get("/", (req, res) => {
-  const dailyTasks = [
-    { id: 1, type: "daily", name: "Watch Short Video", coin: 10, spin: 1 }
-  ];
-  const specialTasks = [
-    { id: 2, type: "special", name: "Join Telegram Channel", coin: 20, spin: 2 }
-  ];
-  res.json({ success: true, dailyTasks, specialTasks });
+// Daily task config
+const DAILY_TASK_ID = 1;
+const DAILY_TASK_LIMIT = 10;
+const DAILY_TASK_REWARD = { coins: 10, spins: 1 };
+
+// Get all tasks
+router.get("/", async (req, res) => {
+  try {
+    const specialTasks = await SpecialTask.find({ active: true });
+    res.json({
+      success: true,
+      dailyTasks: [{ id: DAILY_TASK_ID, name: "Watch Short Ad", ...DAILY_TASK_REWARD }],
+      specialTasks
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
 // Complete a task
@@ -20,17 +30,40 @@ router.post("/complete", async (req, res) => {
     const user = await User.findOne({ telegramId });
     if(!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // Example: simple coin/spin assignment
-    let reward = { coins: 0, spins: 0 };
-    if(taskId == 1) reward = { coins: 10, spins: 1 };       // daily
-    if(taskId == 2) reward = { coins: 20, spins: 2 };       // special
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    if(!user.dailyTasks) user.dailyTasks = {};
+    if(!user.dailyTasks[today]) user.dailyTasks[today] = 0;
 
-    user.coins += reward.coins;
-    user.spins += reward.spins;
-    await user.save();
+    // Daily Watch Ad Task
+    if(taskId == DAILY_TASK_ID){
+      if(user.dailyTasks[today] >= DAILY_TASK_LIMIT)
+        return res.status(400).json({ success: false, message: "Daily limit reached" });
 
-    res.json({ success: true, reward, user });
-  } catch(err) {
+      user.coins += DAILY_TASK_REWARD.coins;
+      user.spins += DAILY_TASK_REWARD.spins;
+      user.dailyTasks[today] += 1;
+      await user.save();
+
+      return res.json({ success: true, reward: DAILY_TASK_REWARD, user });
+    }
+
+    // Special Tasks
+    const specialTask = await SpecialTask.findById(taskId);
+    if(specialTask){
+      user.coins += specialTask.coins;
+      user.spins += specialTask.spins;
+      await user.save();
+
+      return res.json({
+        success: true,
+        reward: { coins: specialTask.coins, spins: specialTask.spins },
+        user
+      });
+    }
+
+    res.status(400).json({ success: false, message: "Task not found" });
+
+  } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
