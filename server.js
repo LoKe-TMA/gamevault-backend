@@ -1,13 +1,11 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const dotenv = require("dotenv");
 const cors = require("cors");
-
-dotenv.config();
+require("dotenv").config();
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
 // MongoDB connect
 mongoose.connect(process.env.MONGO_URI, {
@@ -15,20 +13,23 @@ mongoose.connect(process.env.MONGO_URI, {
   useUnifiedTopology: true
 })
 .then(() => console.log("✅ MongoDB Connected"))
-.catch(err => {
-  console.error("❌ MongoDB Connection Failed:", err);
-  process.exit(1);
-});
+.catch(err => console.error("❌ DB Connection Error:", err));
 
 // Routes
-const authRoutes = require("./routes/auth.js");
-app.use("/api/auth", authRoutes);
-const tasksRoute = require("./routes/tasks");
-app.use("/api/tasks", tasksRoute);
+const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/user");
+const taskRoutes = require("./routes/tasks");
+const orderRoutes = require("./routes/orders");
 
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/orders", orderRoutes);
 
 // Test route
-app.get("/", (req, res) => res.send("Game Vault Backend Running 🚀"));
+app.get("/", (req, res) => {
+  res.send("🚀 Game Vault Backend Running...");
+});
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🌍 Server running on port ${PORT}`));
