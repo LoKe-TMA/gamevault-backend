@@ -23,6 +23,9 @@ mongoose.connect(process.env.MONGO_URI, {
 // Routes
 const authRoutes = require("./routes/auth.js");
 app.use("/api/auth", authRoutes);
+const tasksRoute = require("./routes/tasks");
+app.use("/api/tasks", tasksRoute);
+
 
 // Test route
 app.get("/", (req, res) => res.send("Game Vault Backend Running 🚀"));
