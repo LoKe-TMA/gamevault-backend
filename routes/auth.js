@@ -9,13 +9,12 @@ router.post("/login", async (req, res) => {
 
     let user = await User.findOne({ telegramId });
     if (!user) {
-      user = new User({ telegramId, firstName, lastName, username, photoUrl });
+      user = new User({ telegramId, firstName, lastName, username, photoUrl, coins: 100 });
       await user.save();
     }
 
     res.json({ success: true, user });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
