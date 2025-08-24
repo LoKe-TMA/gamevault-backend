@@ -3,31 +3,30 @@ const router = express.Router();
 const Task = require("../models/Task");
 const User = require("../models/User");
 
-// Get all tasks
+// Get all special tasks
 router.get("/", async (req, res) => {
-  try {
-    const tasks = await Task.find();
-    res.json({ success: true, tasks });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
+  const tasks = await Task.find();
+  res.json(tasks);
 });
 
-// Complete task (reward user)
+// Complete a task
 router.post("/complete", async (req, res) => {
   try {
     const { telegramId, taskId } = req.body;
-
+    const user = await User.findOne({ telegramId });
     const task = await Task.findById(taskId);
-    if (!task) return res.status(404).json({ success: false, message: "Task not found" });
 
-    const user = await User.findOneAndUpdate(
-      { telegramId },
-      { $inc: { coins: task.rewardCoins, spins: task.rewardSpins } },
-      { new: true }
-    );
+    if (!user || !task) return res.json({ success: false, message: "Invalid task/user" });
 
-    res.json({ success: true, user, reward: { coins: task.rewardCoins, spins: task.rewardSpins } });
+    if (user.completedTasks.includes(taskId)) {
+      return res.json({ success: false, message: "Task already completed" });
+    }
+
+    user.coins += task.reward;
+    user.completedTasks.push(taskId);
+    await user.save();
+
+    res.json({ success: true, reward: task.reward, newBalance: user.coins });
   } catch (err) {
     res.status(500).json({ success: false, message: "Server Error" });
   }
