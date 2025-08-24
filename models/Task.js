@@ -1,13 +1,13 @@
 const mongoose = require("mongoose");
 
-const TaskSchema = new mongoose.Schema({
-  type: { type: String, enum: ["ad", "channel"], required: true }, 
-  title: { type: String, required: true },
+const taskSchema = new mongoose.Schema({
+  type: { type: String, enum: ["ad", "channel", "bot"], required: true },
+  title: String,
   description: String,
-  link: String, // For channel/bot join tasks
-  rewardCoins: { type: Number, default: 0 },
-  rewardSpins: { type: Number, default: 0 },
-  dailyLimit: { type: Number, default: 0 }, // e.g. 20 ads per day
+  url: String, // Channel or Bot link
+  reward: Number,
+  limit: { type: Number, default: 1 },
+  verify: { type: Boolean, default: false }
 }, { timestamps: true });
 
-module.exports = mongoose.model("Task", TaskSchema);
+module.exports = mongoose.model("Task", taskSchema);
