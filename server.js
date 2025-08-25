@@ -6,7 +6,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 app.use(bodyParser.json());
 
-const mongoURI = 'mongodb+srv://demon80706:Demon0909%40@cluster0.xp0t4ou.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'; // Replace with your Atlas URI
+const mongoURI = 'mongodb+srv://demon80706:Demon0909%40@cluster0.xp0t4ou.mongodb.net/TestVault?retryWrites=true&w=majority&appName=Cluster0'; // Replace with your Atlas URI
 mongoose.connect(mongoURI);
 
 const UserSchema = new mongoose.Schema({
