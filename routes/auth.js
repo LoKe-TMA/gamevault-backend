@@ -1,33 +1,35 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
+const jwt = require("jsonwebtoken");
 
-// POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
-    const { telegramId, username, first_name, last_name, photo_url } = req.body;
+    const { telegramId, firstName, lastName, username, photoUrl } = req.body;
 
     let user = await User.findOne({ telegramId });
     if (!user) {
-      user = new User({ telegramId, username, first_name, last_name, photo_url, coin_balance: 0 });
+      user = new User({
+        telegramId,
+        firstName,
+        lastName,
+        username,
+        photoUrl,
+        coins: 0
+      });
       await user.save();
     }
 
-    res.json({ success: true, user });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-// GET /api/auth/profile/:telegramId
-router.get("/profile/:telegramId", async (req, res) => {
-  try {
-    const user = await User.findOne({ telegramId: req.params.telegramId });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-    res.json({ success: true, user });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Server error" });
+    res.json({
+      success: true,
+      token,
+      user
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
