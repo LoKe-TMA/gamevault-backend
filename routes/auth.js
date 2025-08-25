@@ -48,4 +48,32 @@ router.post("/login", async (req, res) => {
     }
 });
 
+// GET user profile by telegramId
+router.get("/profile/:telegramId", async (req, res) => {
+    try {
+        const { telegramId } = req.params;
+        const user = await User.findOne({ telegramId });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({
+            telegramId: user.telegramId,
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            photo_url: user.photo_url,
+            coin_balance: user.coin_balance,
+            referred_by: user.referred_by,
+            created_at: user.created_at
+        });
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+
 module.exports = router;
