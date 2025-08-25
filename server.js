@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
@@ -6,16 +5,21 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 app.use(bodyParser.json());
 
+// MongoDB Connection
 const mongoURI = 'mongodb+srv://demon80706:Demon0909%40@cluster0.xp0t4ou.mongodb.net/TestVault?retryWrites=true&w=majority&appName=Cluster0'; // Replace with your Atlas URI
-mongoose.connect(mongoURI);
+mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('MongoDB connection error:', err));
 
+// Schemas
 const UserSchema = new mongoose.Schema({
     telegramId: Number,
     username: String,
     coins: { type: Number, default: 0 },
     referrals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     referer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    completedDaily: { type: Boolean, default: false }, // To track for referral bonus
+    referBonuses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Added to track bonuses
+    completedDaily: { type: Boolean, default: false },
     orders: [{ type: { type: String }, item: String, price: Number, accountId: String, serverId: String, status: { type: String, default: 'pending' } }]
 });
 
@@ -29,134 +33,197 @@ const TaskSchema = new mongoose.Schema({
 const User = mongoose.model('User', UserSchema);
 const Task = mongoose.model('Task', TaskSchema);
 
-const botToken = '8488031831:AAHopBgCsSKJKe1_V3h1PlsU2zN8eX5C8Jc';
+// Telegram Bot
+const botToken = '8488031831:AAHopBgCsSKJKe1_V3h1PlsU2zN8eX5C8Jc'; // Replace with your bot token
 const bot = new TelegramBot(botToken, { polling: true });
-const adminId = 6457035708; // Replace with admin ID
+const adminId = 6457035708; // Replace with admin Telegram ID
 
 // Register
 app.post('/register', async (req, res) => {
-    let user = await User.findOne({ telegramId: req.body.telegramId });
-    if (!user) {
-        user = new User({ telegramId: req.body.telegramId, username: req.body.username });
-        await user.save();
+    try {
+        let user = await User.findOne({ telegramId: req.body.telegramId });
+        if (!user) {
+            user = new User({ telegramId: req.body.telegramId, username: req.body.username });
+            await user.save();
+        }
+        res.json({ coins: user.coins });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
     }
-    // Handle referral if start param, but assume handled in bot
-    res.json({ coins: user.coins });
 });
 
 // Place Order
 app.post('/place-order', async (req, res) => {
-    const user = await User.findOne({ telegramId: req.body.telegramId });
-    user.coins -= req.body.price;
-    user.orders.push({
-        type: req.body.type,
-        item: req.body.item,
-        price: req.body.price,
-        accountId: req.body.accountId,
-        serverId: req.body.serverId
-    });
-    await user.save();
-    bot.sendMessage(adminId, `New Order: ${req.body.type} ${req.body.item} for user ${user.username}. Account: ${req.body.accountId} ${req.body.serverId ? 'Server: ' + req.body.serverId : ''}`);
-    bot.sendMessage(req.body.telegramId, '✅ Order Placed');
-    res.json({ success: true });
+    try {
+        const user = await User.findOne({ telegramId: req.body.telegramId });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        user.coins -= req.body.price;
+        user.orders.push({
+            type: req.body.type,
+            item: req.body.item,
+            price: req.body.price,
+            accountId: req.body.accountId,
+            serverId: req.body.serverId
+        });
+        await user.save();
+        bot.sendMessage(adminId, `New Order: ${req.body.type} ${req.body.item} for user ${user.username}. Account: ${req.body.accountId} ${req.body.serverId ? 'Server: ' + req.body.serverId : ''}`);
+        bot.sendMessage(req.body.telegramId, '✅ Order Placed');
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
-// Reward Ad (assume reward 100 coins per ad, adjust as needed)
+// Reward Ad
 app.post('/reward-ad', async (req, res) => {
-    const user = await User.findOne({ telegramId: req.body.telegramId });
-    user.coins += 100; // Example reward
-    user.completedDaily = true; // Flag for referral
-    await user.save();
-    bot.sendMessage(req.body.telegramId, '🎁 Task Reward Earned');
-    res.json({ coins: user.coins });
+    try {
+        const user = await User.findOne({ telegramId: req.body.telegramId });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        user.coins += 100; // Example reward
+        user.completedDaily = true;
+        await user.save();
+        bot.sendMessage(req.body.telegramId, '🎁 Task Reward Earned');
+        res.json({ coins: user.coins });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // Check Referral Bonus
 app.post('/check-referral-bonus', async (req, res) => {
-    const user = await User.findOne({ telegramId: req.body.telegramId });
-    if (user.completedDaily && user.referer) {
+    try {
+        const user = await User.findOne({ telegramId: req.body.telegramId });
+        if (!user || !user.completedDaily || !user.referer) return res.json({ bonusAdded: false });
         const referer = await User.findById(user.referer);
-        if (!referer.referBonuses.includes(user._id)) { // Avoid duplicate, assume add field referBonuses: []
+        if (!referer.referBonuses.includes(user._id)) {
             referer.coins += 100;
             referer.referBonuses.push(user._id);
             await referer.save();
             bot.sendMessage(referer.telegramId, '🎁 Referral Bonus Received');
             res.json({ bonusAdded: true });
+        } else {
+            res.json({ bonusAdded: false });
         }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
     }
-    res.json({ bonusAdded: false });
 });
 
 // Special Tasks
 app.get('/special-tasks', async (req, res) => {
-    const tasks = await Task.find();
-    res.json(tasks);
+    try {
+        const tasks = await Task.find();
+        res.json(tasks);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 app.post('/verify-task', async (req, res) => {
-    // Use Telegram API to verify join, but for simplicity assume verified
-    // In real, use bot.getChatMember or similar
-    const user = await User.findOne({ telegramId: req.body.telegramId });
-    const task = await Task.findById(req.body.taskId);
-    user.coins += task.reward;
-    await user.save();
-    res.json({ verified: true, coins: user.coins });
+    try {
+        const user = await User.findOne({ telegramId: req.body.telegramId });
+        const task = await Task.findById(req.body.taskId);
+        if (!user || !task) return res.status(404).json({ error: 'User or task not found' });
+        // Verify join via Telegram API (simplified for now)
+        user.coins += task.reward;
+        await user.save();
+        res.json({ verified: true, coins: user.coins });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // Refer Info
 app.get('/refer-info', async (req, res) => {
-    const user = await User.findOne({ telegramId: req.query.telegramId }).populate('referrals');
-    res.json({ friends: user.referrals.length, referCoins: user.referrals.length * 100 });
+    try {
+        const user = await User.findOne({ telegramId: req.query.telegramId }).populate('referrals');
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json({ friends: user.referrals.length, referCoins: user.referrals.length * 100 });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // Orders
 app.get('/orders', async (req, res) => {
-    const user = await User.findOne({ telegramId: req.query.telegramId });
-    res.json(user.orders);
+    try {
+        const user = await User.findOne({ telegramId: req.query.telegramId });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(user.orders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
-// Bot handlers
+// Bot Handlers
 bot.onText(/\/start (\d+)/, async (msg, match) => {
-    const refererId = match[1];
-    const user = await User.findOne({ telegramId: msg.from.id });
-    if (user && !user.referer) {
-        user.referer = await User.findOne({ telegramId: refererId })._id;
-        const referer = await User.findOne({ telegramId: refererId });
-        referer.referrals.push(user._id);
-        await referer.save();
-        await user.save();
+    try {
+        const refererId = match[1];
+        const user = await User.findOne({ telegramId: msg.from.id });
+        if (user && !user.referer) {
+            user.referer = (await User.findOne({ telegramId: refererId }))._id;
+            const referer = await User.findOne({ telegramId: refererId });
+            referer.referrals.push(user._id);
+            await referer.save();
+            await user.save();
+        }
+    } catch (err) {
+        console.error(err);
     }
 });
 
 bot.onText(/\/confirm (\d+) (\w+)/, async (msg, match) => {
     if (msg.from.id !== adminId) return;
-    const orderIndex = match[1];
-    const user = await User.findOne({ 'orders._id': match[2] }); // Assume order id
-    // Update status to confirmed
-    // user.orders[orderIndex].status = 'confirmed';
-    await user.save();
-    bot.sendMessage(user.telegramId, '✅ Order Confirmed');
+    try {
+        const user = await User.findOne({ 'orders._id': match[2] });
+        if (!user) return bot.sendMessage(msg.from.id, 'Order not found');
+        const order = user.orders.id(match[2]);
+        order.status = 'confirmed';
+        await user.save();
+        bot.sendMessage(user.telegramId, '✅ Order Confirmed');
+    } catch (err) {
+        console.error(err);
+        bot.sendMessage(msg.from.id, 'Error confirming order');
+    }
 });
 
 bot.onText(/\/reject (\d+) (\w+) (.+)/, async (msg, match) => {
     if (msg.from.id !== adminId) return;
-    const orderIndex = match[1];
-    const reason = match[3];
-    const user = await User.findOne({ 'orders._id': match[2] });
-    // user.orders[orderIndex].status = 'rejected';
-    // Refund coins if needed
-    await user.save();
-    bot.sendMessage(user.telegramId, `❌ Order Rejected: ${reason}`);
+    try {
+        const user = await User.findOne({ 'orders._id': match[2] });
+        if (!user) return bot.sendMessage(msg.from.id, 'Order not found');
+        const order = user.orders.id(match[2]);
+        order.status = 'rejected';
+        user.coins += order.price; // Refund coins
+        await user.save();
+        bot.sendMessage(user.telegramId, `❌ Order Rejected: ${match[3]}`);
+    } catch (err) {
+        console.error(err);
+        bot.sendMessage(msg.from.id, 'Error rejecting order');
+    }
 });
 
-bot.onText(/\/broadcast (.+)/, (msg, match) => {
+bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     if (msg.from.id !== adminId) return;
-    const message = match[1];
-    const users = await User.find();
-    users.forEach(u => bot.sendMessage(u.telegramId, message));
+    try {
+        const users = await User.find();
+        users.forEach(u => bot.sendMessage(u.telegramId, match[1]));
+    } catch (err) {
+        console.error(err);
+        bot.sendMessage(msg.from.id, 'Error broadcasting message');
+    }
 });
 
-// For managing special tasks, since no dashboard, use bot commands or direct DB
-// Example: /addtask name type id reward
-
-app.listen(3000, () => console.log('Server running'));
+// Port Binding for Render.com
+const PORT = process.env.PORT || 10000; // Use Render's PORT or default to 10000
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});
