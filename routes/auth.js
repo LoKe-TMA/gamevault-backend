@@ -1,79 +1,34 @@
 const express = require("express");
 const router = express.Router();
-const crypto = require("crypto");
 const User = require("../models/User");
 
-// Telegram login verification
+// POST /api/auth/login
 router.post("/login", async (req, res) => {
-    const { initData, referred_by } = req.body;
+  try {
+    const { telegramId, username, first_name, last_name, photo_url } = req.body;
 
-    function verifyTelegramData(data) {
-        const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-        const secretKey = crypto.createHash('sha256').update(telegramBotToken).digest();
-        
-        const dataCheckString = Object.keys(data)
-            .filter(key => key !== 'hash')
-            .sort()
-            .map(key => `${key}=${data[key]}`)
-            .join('\n');
-
-        const hash = crypto.createHmac('sha256', secretKey)
-            .update(dataCheckString)
-            .digest('hex');
-
-        return hash === data.hash;
+    let user = await User.findOne({ telegramId });
+    if (!user) {
+      user = new User({ telegramId, username, first_name, last_name, photo_url, coin_balance: 0 });
+      await user.save();
     }
 
-    if (!verifyTelegramData(initData)) {
-        return res.status(400).json({ message: "Invalid Telegram Data" });
-    }
-
-    try {
-        let user = await User.findOne({ telegramId: initData.id });
-        if (!user) {
-            user = new User({
-                telegramId: initData.id,
-                username: initData.username,
-                first_name: initData.first_name,
-                last_name: initData.last_name,
-                photo_url: initData.photo_url,
-                referred_by: referred_by || null,
-            });
-            await user.save();
-        }
-        res.json({ success: true, user });
-    } catch (err) {
-        console.log(err);
-        res.status(500).json({ message: "Server error" });
-    }
+    res.json({ success: true, user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
-// GET user profile by telegramId
+// GET /api/auth/profile/:telegramId
 router.get("/profile/:telegramId", async (req, res) => {
-    try {
-        const { telegramId } = req.params;
-        const user = await User.findOne({ telegramId });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        res.json({
-            telegramId: user.telegramId,
-            username: user.username,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            photo_url: user.photo_url,
-            coin_balance: user.coin_balance,
-            referred_by: user.referred_by,
-            created_at: user.created_at
-        });
-
-    } catch (err) {
-        console.log(err);
-        res.status(500).json({ message: "Server error" });
-    }
+  try {
+    const user = await User.findOne({ telegramId: req.params.telegramId });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
-
 
 module.exports = router;
