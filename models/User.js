@@ -1,14 +1,13 @@
 const mongoose = require("mongoose");
 
-const userSchema = new mongoose.Schema({
-  telegramId: { type: String, required: true, unique: true },
-  username: { type: String },
-  first_name: { type: String },
-  last_name: { type: String },
-  photo_url: { type: String },
+const UserSchema = new mongoose.Schema({
+  telegramId: { type: String, unique: true },
+  username: String,
+  first_name: String,
+  last_name: String,
+  photo_url: String,
   coin_balance: { type: Number, default: 0 },
-  referred_by: { type: String, default: null },
-  created_at: { type: Date, default: Date.now },
-});
+  referrals: { type: Number, default: 0 }
+}, { timestamps: true });
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("User", UserSchema);
