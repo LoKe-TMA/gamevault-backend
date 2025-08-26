@@ -1,13 +1,14 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const UserSchema = new mongoose.Schema({
-  telegramId: { type: String, unique: true },
+const userSchema = new mongoose.Schema({
+  telegramId: { type: String, required: true, unique: true },
   username: String,
-  first_name: String,
-  last_name: String,
-  photo_url: String,
-  coin_balance: { type: Number, default: 0 },
-  referrals: { type: Number, default: 0 }
+  firstName: String,
+  lastName: String,
+  photoUrl: String,
+  coins: { type: Number, default: 0 },
+  referredBy: String
 }, { timestamps: true });
 
-module.exports = mongoose.model("User", UserSchema);
+module.exports = mongoose.model('User', userSchema);
+
