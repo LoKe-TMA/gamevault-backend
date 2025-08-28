@@ -1,14 +1,13 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  game: String,
-  item: String,
-  accountId: String,
-  zoneId: String,
-  price: Number,
-  status: { type: String, enum: ['pending','completed','failed'], default: 'pending' },
-  createdAt: { type: Date, default: Date.now }
-});
+  userId: { type: String, required: true },
+  game: String,         // "PUBG" or "MLBB"
+  package: String,      // e.g. UC 60
+  price: Number,        // in coins
+  accountId: String,    // required for both PUBG & MLBB
+  serverId: String,     // only for MLBB
+  status: { type: String, default: "Pending" }
+}, { timestamps: true });
 
-module.exports = mongoose.model('Order', orderSchema);
+module.exports = mongoose.model("Order", orderSchema);
