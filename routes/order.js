@@ -1,59 +1,43 @@
-const express = require('express');
+const express = require("express");
+const Order = require("../models/Order");
+const User = require("../models/User");
 const router = express.Router();
-const Order = require('../models/Order');
-const User = require('../models/User');
-const Package = require('../models/Package');
-const { notifyAdmin } = require('../utils/bot');
 
-// POST /api/orders
-// body: { telegramId, packageId, accountId, zoneId }
-router.post('/', async (req, res) => {
+// Create order
+router.post("/create", async (req, res) => {
+  const { userId, game, packageName, price, accountId, serverId } = req.body;
   try {
-    const { telegramId, packageId, accountId, zoneId } = req.body;
-    if (!telegramId || !packageId) return res.status(400).json({ success: false, message: 'Missing data' });
+    const user = await User.findById(userId);
+    if (!user || user.coins < price) {
+      return res.status(400).json({ error: "Not enough coins" });
+    }
 
-    const user = await User.findOne({ telegramId });
-    const pkg = await Package.findById(packageId);
-    if (!user || !pkg) return res.status(400).json({ success: false, message: 'Invalid user or package' });
-
-    if (user.coins < pkg.price) return res.status(400).json({ success: false, message: 'Insufficient coins' });
-
-    // Deduct and save
-    user.coins -= pkg.price;
+    user.coins -= price;
     await user.save();
 
     const order = new Order({
-      userId: user._id,
-      game: pkg.game,
-      item: pkg.name,
+      userId,
+      game,
+      package: packageName,
+      price,
       accountId,
-      zoneId,
-      price: pkg.price,
-      status: 'pending'
+      serverId
     });
     await order.save();
 
-    // Notify admin
-    await notifyAdmin(
-      `🛒 *New Order*\nUser: ${user.username || user.telegramId}\nGame: ${pkg.game}\nItem: ${pkg.name}\nPrice: ${pkg.price}\nAccount: ${accountId}${zoneId ? ' / ' + zoneId : ''}\nOrderId: ${order._id}`
-    );
-
-    res.json({ success: true, order, new_balance: user.coins });
+    res.json(order);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/orders/:telegramId
-router.get('/:telegramId', async (req, res) => {
+// Get user orders
+router.get("/:userId", async (req, res) => {
   try {
-    const user = await User.findOne({ telegramId: req.params.telegramId });
-    if (!user) return res.json({ success: true, orders: [] });
-    const orders = await Order.find({ userId: user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, orders });
+    const orders = await Order.find({ userId: req.params.userId }).sort({ createdAt: -1 });
+    res.json(orders);
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ error: err.message });
   }
 });
 
