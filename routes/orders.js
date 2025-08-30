@@ -1,49 +1,59 @@
-const express = require("express");
+// backend/routes/orders.js
+import express from "express";
+import User from "../models/User.js";
+import Order from "../models/Order.js";
+import { sendOrderToAdmin } from "../utils/bot.js";
+
 const router = express.Router();
-const Order = require("../models/Order");
-const User = require("../models/User");
-const { notifyAdmin } = require("../utils/bot");
 
-// POST /api/orders
-router.post("/", async (req, res) => {
+// Create new order
+router.post("/create", async (req, res) => {
   try {
-    const { telegramId, game, orderType, accountId, serverId, cost } = req.body;
+    const { telegramId, game, item, priceCoins, accountId, serverId } = req.body;
 
-    const user = await User.findOne({ telegramId });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    let user = await User.findOne({ telegramId });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (user.coin_balance < cost) {
-      return res.status(400).json({ success: false, message: "Not enough coins" });
+    if (user.coins < priceCoins) {
+      return res.status(400).json({ error: "Not enough coins" });
     }
 
-    user.coin_balance -= cost;
+    // Deduct coins
+    user.coins -= priceCoins;
     await user.save();
 
-    const order = new Order({ userId: user._id, game, orderType, accountId, serverId, cost });
+    const order = new Order({
+      userId: user._id,
+      game,
+      item,
+      priceCoins,
+      accountId,
+      serverId
+    });
+
     await order.save();
 
-    await notifyAdmin(
-      `🛒 New Order\n\n👤 User: ${user.username || user.telegramId}\n🎮 Game: ${game}\n📦 Type: ${orderType}\n💰 Cost: ${cost}\n🆔 Account: ${accountId}${serverId ? "/" + serverId : ""}\n\nStatus: Pending`
-    );
+    // Notify admin via bot
+    sendOrderToAdmin(order, user);
 
-    res.json({ success: true, order, new_balance: user.coin_balance });
+    res.json({ success: true, order });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// GET /api/orders/:telegramId
-router.get("/:telegramId", async (req, res) => {
+// Get user's orders
+router.get("/my/:telegramId", async (req, res) => {
   try {
     const user = await User.findOne({ telegramId: req.params.telegramId });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     const orders = await Order.find({ userId: user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, orders });
+    res.json(orders);
   } catch (err) {
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-module.exports = router;
+export default router;
