@@ -1,4 +1,4 @@
-// backend/routes/auth.js
+// backend/routes/auth.js (updated to handle referral)
 import express from "express";
 import User from "../models/User.js";
 import { validateTelegramAuth } from "../utils/telegramAuth.js";
@@ -20,6 +20,17 @@ router.post("/login", async (req, res) => {
         name: `${data.first_name || ""} ${data.last_name || ""}`.trim(),
         coins: 0
       });
+
+      // Check referral (start param)
+      if (data.start_param) {
+        user.referredBy = data.start_param;
+        const inviter = await User.findOne({ telegramId: data.start_param });
+        if (inviter) {
+          inviter.referrals.push(user.telegramId);
+          await inviter.save();
+        }
+      }
+
       await user.save();
     }
 
