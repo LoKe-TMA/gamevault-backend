@@ -1,22 +1,55 @@
-const axios = require('axios');
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID;
+// backend/utils/bot.js
+import TelegramBot from "node-telegram-bot-api";
+import Order from "../models/Order.js";
+import User from "../models/User.js";
 
-async function sendMessage(chatId, text) {
-  try {
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      chat_id: chatId,
-      text,
-      parse_mode: "Markdown"
-    });
-  } catch (err) {
-    console.error('Telegram sendMessage error:', err.response?.data || err.message);
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const ADMIN_ID = process.env.ADMIN_ID; // Telegram ID of admin
+
+// Send new order to admin
+export async function sendOrderToAdmin(order, user) {
+  const msg = `
+🛒 *New Order*  
+👤 User: ${user.name} (${user.telegramId})  
+🎮 Game: ${order.game}  
+📦 Item: ${order.item}  
+💰 Coins: ${order.priceCoins}  
+🆔 Account: ${order.accountId} ${order.serverId ? `/ ${order.serverId}` : ""}
+  `;
+
+  bot.sendMessage(ADMIN_ID, msg, {
+    parse_mode: "Markdown",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Confirm", callback_data: `confirm_${order._id}` },
+          { text: "❌ Reject", callback_data: `reject_${order._id}` }
+        ]
+      ]
+    }
+  });
+}
+
+// Handle admin decision
+bot.on("callback_query", async (query) => {
+  const [action, orderId] = query.data.split("_");
+  const order = await Order.findById(orderId).populate("userId");
+
+  if (!order) return bot.answerCallbackQuery(query.id, { text: "Order not found" });
+
+  if (action === "confirm") {
+    order.status = "confirmed";
+    await order.save();
+    bot.sendMessage(order.userId.telegramId, `✅ Order Confirmed: ${order.item}`);
+  } else if (action === "reject") {
+    order.status = "rejected";
+    await order.save();
+    // Refund coins
+    const user = await User.findById(order.userId);
+    user.coins += order.priceCoins;
+    await user.save();
+    bot.sendMessage(order.userId.telegramId, `❌ Order Rejected: ${order.item}\nCoins refunded.`);
   }
-}
 
-async function notifyAdmin(text) {
-  if (!ADMIN_ID) return;
-  return sendMessage(ADMIN_ID, text);
-}
-
-module.exports = { sendMessage, notifyAdmin };
+  bot.answerCallbackQuery(query.id, { text: `Order ${action}ed` });
+});
