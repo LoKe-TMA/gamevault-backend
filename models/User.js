@@ -1,11 +1,12 @@
-const mongoose = require("mongoose");
+// backend/models/User.js
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-  telegramId: { type: String, required: true, unique: true },
-  username: String,
+  telegramId: { type: String, unique: true },
+  name: String,
   coins: { type: Number, default: 0 },
-  referrerId: String,
-  invitedCount: { type: Number, default: 0 }
+  referrals: [{ type: String }], // store telegramIds of referred users
+  orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }]
 }, { timestamps: true });
 
-module.exports = mongoose.model("User", userSchema);
+export default mongoose.model("User", userSchema);
