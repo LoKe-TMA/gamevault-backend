@@ -1,36 +1,33 @@
-const express = require("express");
-const router = express.Router();
-const User = require("../models/User");
-const jwt = require("jsonwebtoken");
+// backend/routes/auth.js
+import express from "express";
+import User from "../models/User.js";
+import { validateTelegramAuth } from "../utils/telegramAuth.js";
 
+const router = express.Router();
+
+// Auto register/login
 router.post("/login", async (req, res) => {
   try {
-    const { telegramId, firstName, lastName, username, photoUrl } = req.body;
+    const { initData } = req.body;
+    const data = validateTelegramAuth(initData);
 
-    let user = await User.findOne({ telegramId });
+    if (!data) return res.status(400).json({ error: "Invalid Telegram auth" });
+
+    let user = await User.findOne({ telegramId: data.id });
     if (!user) {
       user = new User({
-        telegramId,
-        firstName,
-        lastName,
-        username,
-        photoUrl,
+        telegramId: data.id,
+        name: `${data.first_name || ""} ${data.last_name || ""}`.trim(),
         coins: 0
       });
       await user.save();
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-    res.json({
-      success: true,
-      token,
-      user
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-module.exports = router;
+export default router;
