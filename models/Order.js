@@ -1,15 +1,39 @@
-// backend/models/Order.js
-import mongoose from "mongoose";
+const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  game: String,
-  item: String,
-  priceCoins: Number,
-  accountId: String,
-  serverId: String,
-  status: { type: String, enum: ["pending", "confirmed", "rejected"], default: "pending" }
-}, { timestamps: true });
+    userId: {
+        type: Number,
+        required: true
+    },
+    orderType: {
+        type: String,
+        required: true
+    },
+    item: {
+        type: String,
+        required: true
+    },
+    price: {
+        type: Number,
+        required: true
+    },
+    accountId: {
+        type: String,
+        required: true
+    },
+    serverId: {
+        type: String,
+        default: null // For MLBB orders
+    },
+    status: {
+        type: String,
+        enum: ['Pending', 'Confirmed', 'Rejected'],
+        default: 'Pending'
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
 
-export default mongoose.model("Order", orderSchema);
-
+module.exports = mongoose.model('Order', orderSchema);
