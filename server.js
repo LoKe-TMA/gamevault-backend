@@ -1,33 +1,22 @@
-// backend/server.js
-import express from "express";
-import dotenv from "dotenv";
-import mongoose from "mongoose";
-import bodyParser from "body-parser";
-import cors from "cors";
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
-import authRoutes from "./routes/auth.js";
-import adsRoutes from "./routes/ads.js";
-import orderRoutes from "./routes/orders.js";
-import taskRoutes from "./routes/tasks.js";
-import referRoutes from "./routes/refer.js";
-
-dotenv.config();
 const app = express();
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
 
-app.use(cors());
-app.use(bodyParser.json());
+// DB
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log('Mongo connected'))
+  .catch((e) => console.error('Mongo error', e));
 
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error(err));
+// Routes
+app.use('/api/auth', require('./routes/auth'));
 
-app.use("/api/auth", authRoutes);
-app.use("/api/ads", adsRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/tasks", taskRoutes);
-app.use("/api/refer", referRoutes);
+app.get('/', (_req, res) => res.send('GameVault API OK'));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+const port = process.env.PORT || 4000;
+app.listen(port, () => console.log(`API listening on ${port}`));
