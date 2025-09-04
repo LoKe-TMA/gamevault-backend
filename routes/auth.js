@@ -1,44 +1,76 @@
-// backend/routes/auth.js (updated to handle referral)
-import express from "express";
-import User from "../models/User.js";
-import { validateTelegramAuth } from "../utils/telegramAuth.js";
+const router = require('express').Router();
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const { validateInitData } = require('../utils/verifyInitData');
 
-const router = express.Router();
+function mkReferralCode(tgId) {
+  // very simple & unique-ish for MVP
+  return `ref_${Number(tgId).toString(36)}`;
+}
 
-// Auto register/login
-router.post("/login", async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { initData } = req.body;
-    const data = validateTelegramAuth(initData);
+    if (!initData) return res.status(400).json({ error: 'initData required' });
 
-    if (!data) return res.status(400).json({ error: "Invalid Telegram auth" });
+    const { ok, user: tgUser, params, reason } = validateInitData(
+      initData,
+      process.env.BOT_TOKEN,
+      24 * 3600 // accept within 24h
+    );
 
-    let user = await User.findOne({ telegramId: data.id });
+    if (!ok) return res.status(401).json({ error: 'invalid initData', reason });
+
+    const tgId = String(tgUser?.id || '');
+    if (!tgId) return res.status(400).json({ error: 'no tg user id' });
+
+    // Find or create user
+    let user = await User.findOne({ tgId });
     if (!user) {
       user = new User({
-        telegramId: data.id,
-        name: `${data.first_name || ""} ${data.last_name || ""}`.trim(),
-        coins: 0
+        tgId,
+        username: tgUser.username || '',
+        firstName: tgUser.first_name || '',
+        lastName: tgUser.last_name || '',
+        coins: 0,
+        referralCode: mkReferralCode(tgId),
       });
 
-      // Check referral (start param)
-      if (data.start_param) {
-        user.referredBy = data.start_param;
-        const inviter = await User.findOne({ telegramId: data.start_param });
-        if (inviter) {
-          inviter.referrals.push(user.telegramId);
-          await inviter.save();
-        }
+      // Capture referral at first login (start_param from initData)
+      const startParam = params.start_param || '';
+      if (startParam && startParam.startsWith('ref_')) {
+        user.referredBy = startParam;
       }
 
       await user.save();
+    } else {
+      // keep profile fresh
+      user.username = tgUser.username || user.username;
+      user.firstName = tgUser.first_name || user.firstName;
+      user.lastName = tgUser.last_name || user.lastName;
+      await user.save();
     }
 
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    const token = jwt.sign({ uid: user._id, tgId: user.tgId }, process.env.JWT_SECRET, {
+      expiresIn: '7d',
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        tgId: user.tgId,
+        username: user.username,
+        firstName: user.firstName,
+        coins: user.coins,
+        referralCode: user.referralCode,
+        referredBy: user.referredBy,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server error' });
   }
 });
 
-export default router;
+module.exports = router;
